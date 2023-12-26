@@ -4,7 +4,7 @@
 #define EEPROM_SIZE       64
 
 //#define BLUETOOTH_EN    1
-#define WIFI_EN         1
+//#define WIFI_EN         1
 
 #ifdef BLUETOOTH_EN
 
@@ -31,8 +31,8 @@ char BTstr[100] = {};
 
 //const char *ssid = "C2G01_ESP32";
 //const char *password = NULL;
-const char *ssid = "Galaxy A13 A863";
-const char *password = "vere5058";
+const char *ssid = "";
+const char *password = "";
 const char *sheetId = "AKfycbx7eFSIjuFf_J8FW6N-Yk0xnKe2ha0wpISU2umAAV03UJesyM0ZBOSRe36L_-d2NCZd";
 
 String sheetName = "Sheet1";
@@ -218,7 +218,7 @@ void setup() {
 #endif
 
   Serial.println("\nsetup done");
-  delay(10000);
+  delay(5000);
 }
 
 void loop() {

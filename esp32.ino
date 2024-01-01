@@ -3,9 +3,8 @@
 #include <EEPROM.h>
 #define EEPROM_SIZE       64
 
-//#define BLUETOOTH_EN    1
 #define WIFI_EN         1
-#define SIMULATION      1
+//#define BLUETOOTH_EN      1
 
 #ifdef BLUETOOTH_EN
 
@@ -17,9 +16,6 @@
 
 BluetoothSerial SerialBT;
 String BT_ID = "C2G01_ESP32";
-String message = "";
-char incomingChar;
-String serialStr = "";
 char BTstr[100] = {};
 uint8_t update_en = 0;
 
@@ -36,9 +32,6 @@ const char *password = "";
 const char* googleAppsScriptURL = "https://script.google.com/macros/s/AKfycbzsbIjGoYmz-6omRmBLgRw18gZpx0hVqXdTKmaJhBPX3GhRZJmLlRUgleFoWIShLuTH/exec";
 
 HTTPClient http;
-String sheetName = "Sheet1";
-String cell = "A1";
-int lastCol = 1;
 uint8_t update_en = 0;
 
 String getColumnLetter(int col);
@@ -58,18 +51,6 @@ void updateGoogleSheet(uint32_t value);
 #define TRIG_B_PIN      27
 #define ECHO_B_PIN      14
 #define SOUND_SPEED     0.034
-
-#define MOTOR_PWM_PIN   21
-#define MOTOR_DIR1_PIN  19
-#define MOTOR_DIR2_PIN  18
-#define MOTOR_PWM_Ch    0
-#define FRONT_LIMIT_PIN 22
-#define BACK_LIMIT_PIN  23
-#define stop_motor      {ledcWrite(MOTOR_PWM_Ch, 0); digitalWrite(MOTOR_DIR1_PIN, 0); digitalWrite(MOTOR_DIR2_PIN, 0);}
-#define forward_motor   {ledcWrite(MOTOR_PWM_Ch, 100); digitalWrite(MOTOR_DIR1_PIN, 1); digitalWrite(MOTOR_DIR2_PIN, 0);}
-#define return_motor    {ledcWrite(MOTOR_PWM_Ch, 100); digitalWrite(MOTOR_DIR1_PIN, 0); digitalWrite(MOTOR_DIR2_PIN, 1);}
-#define front_limit     digitalRead(FRONT_LIMIT_PIN)
-#define back_limit      digitalRead(BACK_LIMIT_PIN)
 
 #define VIBRATOR_PIN    15
 
@@ -96,7 +77,6 @@ uint8_t start_flag = 1;
 uint8_t alert = 0;
 
 float H_dist = 0, L_dist = 0, Diff_dist = 0;
-float Back_dist = 0;
 
 uint8_t led1 = 0;
 uint8_t ledR_PWM = 0, ledG_PWM = 0, ledB_PWM = 0;
@@ -115,14 +95,11 @@ uint32_t sitting_count = 0;
 uint32_t flash_count= 0;
 uint32_t sit_time = 0;
 uint32_t leave_time = 0;
-
-//debug use
-uint8_t motor_move = 0;       
+   
 ////////////////////////////////////////////
 
 void pressure (void);
 void distance (void);
-void back_support (void);
 void check (void);
 
 ////////////////////////////////////////////
@@ -131,6 +108,8 @@ void setup() {
 
   EEPROM.begin(EEPROM_SIZE);
   seat_width = EEPROM.read(0);
+    //    EEPROM.write(0, seat_width);
+  //    EEPROM.commit();
 
   //  analogReadResolution(12);       //4096, 3.2V
   //  analogSetClockDiv(1);
@@ -140,15 +119,6 @@ void setup() {
   pinMode(ECHO_H_PIN, INPUT);
   pinMode(TRIG_L_PIN, OUTPUT);
   pinMode(ECHO_L_PIN, INPUT);
-  pinMode(TRIG_B_PIN, OUTPUT);
-  pinMode(ECHO_B_PIN, INPUT);
-
-  ledcAttachPin(MOTOR_PWM_PIN, MOTOR_PWM_Ch);
-  ledcSetup(0, 100, 8);         //100Hz, CCR up to 256
-  pinMode(MOTOR_DIR1_PIN, OUTPUT);
-  pinMode(MOTOR_DIR2_PIN, OUTPUT);
-  pinMode(FRONT_LIMIT_PIN, INPUT_PULLUP);
-  pinMode(BACK_LIMIT_PIN, INPUT_PULLUP);
 
   pinMode(VIBRATOR_PIN, OUTPUT);
 
@@ -165,7 +135,7 @@ void setup() {
 #ifdef BLUETOOTH_EN
   SerialBT.begin(BT_ID); //Bluetooth device name
 #endif
-
+  
 #ifdef WIFI_EN
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -174,48 +144,6 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
-
-  // EEPROM.get(2, sit_time);
-
-  // // Initialize the Time library
-  // configTime(0, 0, "pool.ntp.org");
-  // Serial.println("Waiting for time sync");
-  // while (time(nullptr) < 1510644967) {
-  //   delay(10);
-  // }
-  //
-  //  // Get the current date and time
-  //  time_t now = time(nullptr);
-  //  struct tm *timeInfo = localtime(&now);
-  //
-  //  String url = "https://sheets.googleapis.com/v4/spreadsheets/" + String(sheetId) + "/values/" + sheetName;
-  //
-  //  // Prepare HTTP GET request to read the last value in the Google Sheet
-  //  HTTPClient http;
-  //  http.begin(url);
-  //  int httpResponseCode = http.GET();
-  //
-  //  // Compare with the last sit_time
-  //  if (httpResponseCode > 0) {
-  //    // Parse the JSON response
-  //    DynamicJsonDocument jsonDoc(1024);
-  //    deserializeJson(jsonDoc, http.getString());
-  //
-  //    // Extract the last value from the Google Sheet
-  //    String lastValue = jsonDoc["values"][0][0];
-  //
-  //    // Compare with the last stored EEPROM value
-  //    if (lastValue.toInt() != sit_time) {
-  //      // Values are different, update the Google Sheet
-  //      updateGoogleSheet(sit_time);
-  //    } else {
-  //      Serial.println("sit_time in EEPROM is the same as the last value in Google Sheet. No update needed.");
-  //    }
-  //  } else {
-  //    Serial.print("HTTP Request failed. Error code: ");
-  //    Serial.println(httpResponseCode);
-  //  }
-  //  http.end();
 
 #endif
 
@@ -229,17 +157,8 @@ void setup() {
 
 void loop() {
 
-#ifdef SIMULATION
-  if(millis() - serial_count >= 1000){
-    serial_count = millis();
-    updateGoogleSheet(sit_time);
-    sit_time++;
-  }
-
-#else
   pressure();
   distance();
-  back_support();
 
   sit_time = (millis() - sitting_count) / 1000;
   leave_time = (millis() - leave_count) / 1000;
@@ -251,58 +170,80 @@ void loop() {
     check();
   }
 
-  if(millis() - serial_count >= 3000){
+  if(millis() - serial_count >= 500){
+//
+//    Serial.print("\n\nCPU time: ");
+//    Serial.print(millis());
+//    Serial.print(" , PB: (front) ");
+//    Serial.print(front_limit);
+//    Serial.print(" (back) ");
+//    Serial.print(back_limit);
+//    Serial.print(" (motor) ");
+//    Serial.print(motor_move);
+//    Serial.print(" , flag: ");
+//    Serial.print(start_flag);
+//    Serial.print(", ");
+//    Serial.println(alert);
+//
+//    Serial.print("Back_dist: ");
+//    Serial.print(Back_dist);
+//    Serial.print("  Upper_dist: ");
+//    Serial.print(H_dist);
+//    Serial.print("  Lower_dist: ");
+//    Serial.print(L_dist);
+//    Serial.print("  Diff_dist (%): ");
+//    Serial.println(Diff_dist);
+//
+//    Serial.print("Pressure: ");
+//    Serial.print(left_pressure);
+//    Serial.print(", ");
+//    Serial.print(right_pressure);
+//    Serial.print(", Pressure_dist (%): ");
+//    Serial.println(Diff_pressure);
+//
+//    Serial.print("Time (s): (sit) ");
+//    Serial.print(sit_time);
+//    Serial.print(", (stand) ");
+//    Serial.println(leave_time);
 
-    Serial.print("\n\nCPU time: ");
-    Serial.print(millis());
-    Serial.print(" , PB: (front) ");
-    Serial.print(front_limit);
-    Serial.print(" (back) ");
-    Serial.print(back_limit);
-    Serial.print(" (motor) ");
-    Serial.print(motor_move);
-    Serial.print(" , flag: ");
+    Serial.println();
     Serial.print(start_flag);
     Serial.print(", ");
     Serial.println(alert);
 
-    Serial.print("Back_dist: ");
-    Serial.print(Back_dist);
-    Serial.print("  Upper_dist: ");
     Serial.print(H_dist);
-    Serial.print("  Lower_dist: ");
+    Serial.print("   ");
     Serial.print(L_dist);
-    Serial.print("  Diff_dist (%): ");
+    Serial.print("   ");
     Serial.println(Diff_dist);
 
-    Serial.print("Pressure: ");
     Serial.print(left_pressure);
-    Serial.print(", ");
+    Serial.print("   ");
     Serial.print(right_pressure);
-    Serial.print(", Pressure_dist (%): ");
+    Serial.print("   ");
     Serial.println(Diff_pressure);
 
-    Serial.print("Time (s): (sit) ");
     Serial.print(sit_time);
-    Serial.print(", (stand) ");
+    Serial.print("   ");
     Serial.println(leave_time);
+
+#ifdef BLUETOOTH_EN
+    sprintf(BTstr, "flag: %u %d\n", start_flag, alert);
+    SerialBT.write((uint8_t *)&BTstr, strlen(BTstr));
+    sprintf(BTstr, "dist: %.2f %.2f %.2f%%\n", H_dist, L_dist, Diff_dist);
+    SerialBT.write((uint8_t *)&BTstr, strlen(BTstr));
+    sprintf(BTstr, "pres: %.2f %.2f %.2f%%\n", left_pressure, right_pressure, Diff_pressure);
+    SerialBT.write((uint8_t *)&BTstr, strlen(BTstr));
+    sprintf(BTstr, "time: %u %u\n\n", sit_time, leave_time);
+    SerialBT.write((uint8_t *)&BTstr, strlen(BTstr));
+#endif
     serial_count = millis();
   }
 
-  //  if(FLASH_WRITE_PB == 0 && flash_PB_flag == 0){
-  //    delay(20);
-  //    flash_PB_flag = 1;
-  //    seat_width = L_dist;
-  //    EEPROM.write(0, seat_width);
-  //    EEPROM.commit();
-  //  }else if(FLASH_WRITE_PB && flash_PB_flag){
-  //    flash_PB_flag = 0;
-  //  }
-
   if(millis() - flash_count >= 60 * 1000 && start_flag){
     flash_count = millis();
-    EEPROM.put(2, sit_time);
-    EEPROM.commit();
+//    EEPROM.put(2, sit_time);
+//    EEPROM.commit();
 
 #ifdef WIFI_EN
     if (WiFi.status() != WL_CONNECTED) {
@@ -313,7 +254,6 @@ void loop() {
     updateGoogleSheet(start_flag);
 #endif
   }
-#endif
 }
 
 void pressure(void){
@@ -336,23 +276,6 @@ float get_dist (int TRIG_PIN, int ECHO_PIN){
   return (float)(pulseIn(ECHO_PIN, 1) * SOUND_SPEED / 2);
 }
 
-void back_support (void){
-  Back_dist = get_dist(TRIG_B_PIN, ECHO_B_PIN);
-  bool limitSwitch1 = (back_limit == 0);   // 
-  bool limitSwitch2 = (front_limit == 0);  // Active LOW
-
-  if (Back_dist > min_dist && Back_dist < seat_width && !limitSwitch1 && start_flag) {
-    forward_motor
-    motor_move = 1;
-  } else if (Back_dist >= seat_width && !limitSwitch2) {
-    return_motor
-    motor_move = 2;
-  } else {
-    stop_motor
-    motor_move = 3;
-  }
-}
-
 void distance (void){
   if(start_flag == 0){
     H_dist = 0.0;
@@ -369,7 +292,15 @@ void distance (void){
 }
 
 void output_device(int vibrator_en, int RLED_en, int GLED_en, int BLED_en){
-  digitalWrite(VIBRATOR_PIN, vibrator_en);
+  static uint32_t vibrator_count = 0;
+  if(vibrator_en && (millis() - vibrator_count) < 3000){
+      digitalWrite(VIBRATOR_PIN, 1);
+  }else if(vibrator_en == 0){
+      digitalWrite(VIBRATOR_PIN, 0);
+      vibrator_count = millis();
+  }else{
+      digitalWrite(VIBRATOR_PIN, 0);
+  }
   ledR_PWM = RLED_en? ledR_PWM + 5 : 0;
   ledG_PWM = GLED_en && RLED_en? ledG_PWM + 2 :
              GLED_en? ledG_PWM + 2 : 0;
@@ -454,7 +385,6 @@ void updateGoogleSheet(uint32_t value) {
 
   if (httpResponseCode > 0) {
     String response = http.getString();
-    Serial.println(response);
   }
 
   http.end();
